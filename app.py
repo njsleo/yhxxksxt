@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go # 引入更高级的绘图库
+import plotly.graph_objects as go
+import plotly.express as px  # 引入绘图大神
 import os
 
 st.set_page_config(page_title="学生全科诊断系统", layout="wide")
-st.title('🎓 学生全科能力诊断系统')
+st.title('🎓 学生全科能力诊断系统 (全彩可视化版)')
 
-# --- 1. 数据加载逻辑 (自动读取 data.xlsx 或 上传) ---
+# --- 1. 数据加载 ---
 data_file = None
 default_file = 'data.xlsx'
 
@@ -23,114 +24,118 @@ if data_file is None:
     st.warning("请上传 Excel 或在 GitHub 存入 data.xlsx")
     st.stop()
 
-# --- 2. 数据预处理 (智能识别科目) ---
+# --- 2. 数据清洗与智能识别 ---
 try:
     df = pd.read_excel(data_file)
-    df = df.dropna(subset=['姓名']) # 去除空行
+    df = df.dropna(subset=['姓名']) 
     
-    # 【核心黑科技】：自动找出哪些列是“科目”
-    # 逻辑：排除掉 姓名、学号、总分、排名 等非科目列，剩下的数字列都算科目
-    exclude_cols = ['姓名', '学号', '考号', '班级', '学校', '区县', '总分', '总分赋分', '班级排名', '年级排名', '校名']
+    # 排除不需要分析的列
+    exclude_cols = [
+        '姓名', '学号', '考号', '班级', '学校', '区县', '校名', 
+        '总分', '总分赋分', '班级排名', '年级排名', 'Unnamed', '序号'
+    ]
     
-    # 找出所有数字类型的列
-    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-    # 从数字列里，剔除掉上面的 exclude_cols
-    subject_cols = [c for c in numeric_cols if c not in exclude_cols]
+    # 强制转换数字列，找回“消失的科目”
+    subject_cols = []
+    for col in df.columns:
+        if col not in exclude_cols and not str(col).startswith('Unnamed'):
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            if df[col].notna().sum() > 0:
+                subject_cols.append(col)
 
     if not subject_cols:
-        st.error("未找到科目列！请检查Excel表头，确保科目分数为数字格式。")
+        st.error("未找到有效的科目列！请检查Excel表头。")
         st.stop()
 
-    # --- 3. 全班概况 (班级维度的分析) ---
+    # --- 3. 班级概况 (升级为彩色柱状图) ---
     st.header("📊 班级整体学科分析")
     
     # 计算全班各科平均分
     class_avg = df[subject_cols].mean().round(1)
     
-    # 展示各科平均分 (柱状图)
-    st.caption("全班各科平均分对比：")
-    st.bar_chart(class_avg)
+    # 把数据整理成画图需要的格式
+    avg_df = class_avg.reset_index()
+    avg_df.columns = ['科目', '平均分'] # 重命名列方便画图
+
+    # 【升级点】：使用 Plotly 画彩色柱状图
+    fig_bar = px.bar(
+        avg_df, 
+        x='科目', 
+        y='平均分', 
+        color='科目',      # 这行代码让不同科目颜色不同！
+        text_auto=True,   # 自动在柱子上显示数字
+        title="全班各科平均分对比"
+    )
+    # 隐藏图例以节省空间（因为X轴已经写了科目名）
+    fig_bar.update_layout(showlegend=False) 
+    
+    st.plotly_chart(fig_bar, use_container_width=True)
 
     st.divider()
 
-    # --- 4. 个人全科诊断 (六边形雷达图) ---
+    # --- 4. 个人“自适应”雷达图 ---
     st.header("🔍 学生个人深度诊断")
     
-    selected_student = st.selectbox("请选择学生姓名：", df['姓名'].unique())
+    # 搜索框
+    student_list = df['姓名'].unique().tolist()
+    selected_student = st.selectbox("请选择学生姓名：", student_list)
     
     if selected_student:
-        # 取出该学生的数据
         student_data = df[df['姓名'] == selected_student].iloc[0]
         
-        # 准备画图数据
-        student_scores = [student_data[sub] for sub in subject_cols] # 学生的每科分数
-        avg_scores = [class_avg[sub] for sub in subject_cols]       # 班级的每科平均分
+        # 只提取该学生“有分数”的科目
+        my_subjects = []
+        my_scores = []
+        class_scores = []
         
-        # 为了让雷达图闭合，需要把第一个数据重复加到最后
-        plot_subjects = subject_cols + [subject_cols[0]]
-        plot_student_scores = student_scores + [student_scores[0]]
-        plot_avg_scores = avg_scores + [avg_scores[0]]
-
-        # --- 开始画雷达图 ---
-        fig = go.Figure()
-
-        # 画第一层：班级平均线 (作为参考标准，灰色)
-        fig.add_trace(go.Scatterpolar(
-            r=plot_avg_scores,
-            theta=plot_subjects,
-            fill='toself',
-            name='班级平均水平',
-            line_color='gray',
-            opacity=0.4
-        ))
-
-        # 画第二层：学生个人线 (蓝色，高亮)
-        fig.add_trace(go.Scatterpolar(
-            r=plot_student_scores,
-            theta=plot_subjects,
-            fill='toself',
-            name=f'{selected_student} 的成绩',
-            line_color='#1f77b4'
-        ))
-
-        fig.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, max(max(plot_student_scores), max(plot_avg_scores)) + 10] # 自动调整刻度范围
-                )),
-            showlegend=True,
-            title=f"【{selected_student}】 学科能力雷达图"
-        )
+        for sub in subject_cols:
+            score = student_data[sub]
+            if pd.notna(score) and score > 0:
+                my_subjects.append(sub)
+                my_scores.append(score)
+                class_scores.append(class_avg[sub])
         
-        # 左右布局：左边放图，右边放具体的表格
-        col1, col2 = st.columns([3, 2])
-        
-        with col1:
-            st.plotly_chart(fig, use_container_width=True)
-            if '总分' in df.columns or '总分赋分' in df.columns:
-                 total_col = '总分' if '总分' in df.columns else '总分赋分'
-                 st.metric("总分", student_data[total_col])
-
-        with col2:
-            st.subheader("📝 单科详细诊断")
-            # 制作一个对比表格
-            comparison_data = []
-            for sub in subject_cols:
-                score = student_data[sub]
-                avg = class_avg[sub]
-                diff = score - avg
-                status = "🟢 优势" if diff > 0 else "🔴 需努力"
-                comparison_data.append({
-                    "科目": sub,
-                    "我的分数": score,
-                    "班级平均": avg,
-                    "差值": f"{diff:+.1f}",
-                    "状态": status
-                })
+        if not my_subjects:
+            st.warning("该学生似乎没有有效的单科成绩。")
+        else:
+            # 数据闭环
+            plot_subjects = my_subjects + [my_subjects[0]]
+            plot_my_scores = my_scores + [my_scores[0]]
+            plot_class_scores = class_scores + [class_scores[0]]
             
-            st.dataframe(pd.DataFrame(comparison_data), hide_index=True)
+            fig = go.Figure()
+            
+            # 班级平均线
+            fig.add_trace(go.Scatterpolar(
+                r=plot_class_scores,
+                theta=plot_subjects,
+                fill='toself',
+                name='班级平均',
+                line_color='gray',
+                opacity=0.3
+            ))
+            
+            # 学生个人线
+            fig.add_trace(go.Scatterpolar(
+                r=plot_my_scores,
+                theta=plot_subjects,
+                fill='toself',
+                name=f'{selected_student}',
+                line_color='#1f77b4'
+            ))
+            
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(visible=True, range=[0, max(max(plot_my_scores), max(plot_class_scores)) + 10])
+                ),
+                title=f"【{selected_student}】 选考科目能力模型 ({len(my_subjects)}选)"
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.caption("详细得分：")
+            display_df = pd.DataFrame([student_data[my_subjects]])
+            st.dataframe(display_df, hide_index=True)
 
 except Exception as e:
     st.error(f"发生错误：{e}")
-    st.info("请检查Excel中是否包含非数字的干扰列，或者表头是否正确。")
