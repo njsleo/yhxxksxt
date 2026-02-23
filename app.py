@@ -14,12 +14,12 @@ st.set_page_config(page_title="星辰学情管理系统", layout="wide", page_ic
 ADMIN_PASSWORD = "123" # 管理员密码
 
 # 1. 总分表链接
-SCORE_URL_PHYSICS = "https://docs.google.com/spreadsheets/d/e/2PACX-1v......"
-SCORE_URL_HISTORY = "https://docs.google.com/spreadsheets/d/e/2PACX-1v......"
+SCORE_URL_PHYSICS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyhhA4C2A9hp-2165uyRgqheKfCccT5NN0dp_FOW2Jl8FE4VmAMPajsWKiTEOCcqIxhIDnuIUwOoQ0/pub?gid=0&single=true&output=csv"
+SCORE_URL_HISTORY = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyhhA4C2A9hp-2165uyRgqheKfCccT5NN0dp_FOW2Jl8FE4VmAMPajsWKiTEOCcqIxhIDnuIUwOoQ0/pub?gid=1671669597&single=true&output=csv"
 
 # 2. 详细分析表链接
 SUBJECT_URLS = {
-    "⚡ 物理": "https://docs.google.com/spreadsheets/d/e/2PACX-1v......",
+    "⚡ 物理": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRLNvn1FqBT1F5w1J7ENAUA3YQuOvfLoohdW4ihjsEZkC_R8JZMCQPqtthzzitC2ZU3mvOMRUmo5omH/pub?gid=761604232&single=true&output=csv",
     "🧪 化学": "", "🧬 生物": "", "📜 历史": "", "🌍 地理": "", "⚖️ 政治": "",
     "📐 数学": "", "📖 语文": "", "🔤 英语": ""
 }
