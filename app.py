@@ -11,7 +11,7 @@ st.set_page_config(page_title="星辰学情管理系统", layout="wide", page_ic
 # ==============================================================================
 # ⚙️ 【配置区域】
 # ==============================================================================
-ADMIN_PASSWORD = "123" # 管理员密码
+ADMIN_PASSWORD = "123456" # 管理员密码
 
 # 1. 总分表链接
 SCORE_URL_PHYSICS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyhhA4C2A9hp-2165uyRgqheKfCccT5NN0dp_FOW2Jl8FE4VmAMPajsWKiTEOCcqIxhIDnuIUwOoQ0/pub?gid=0&single=true&output=csv"
