@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from streamlit_option_menu import option_menu
 import openai
+import os # 引入os库用来检查图片文件是否存在
 
 # ==============================================================================
 # 1. 页面基础配置 (设置新的主题名称)
@@ -140,7 +141,7 @@ st.markdown("""
         color: #1E3A8A;
         font-size: 36px;
         font-weight: 800;
-        margin-bottom: 10px;
+        margin-bottom: 20px;
         text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
     }
 </style>
@@ -170,17 +171,27 @@ def load_data(url, header_lines=0):
 if selected_nav in ["成绩总览", "深度诊断"]:
     
     if not st.session_state.logged_in_student:
-        # 🎓 显示新的网站主标题
+        # 🎓 1. 显示新的网站主标题
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
         
-        # 🎉 显示祝贺/广告横幅 (您可以在这里修改文字内容)
+        # 🐼 2. 显示熊猫和小星星吉祥物图片 (居中显示)
+        # 我们使用三列布局，把图片放在中间的列，这样可以居中且控制大小
+        c_pad1, c_img, c_pad2 = st.columns([1, 2, 1]) 
+        with c_img:
+            # 检查一下您是否上传了 image.png，如果没上传给个友好提示
+            if os.path.exists("image.png"):
+                st.image("image.png", use_column_width=True)
+            else:
+                st.info("💡 提示：为了让可爱的熊猫和小星星显示在这里，请记得将图片命名为 image.png 并上传到您的 GitHub 仓库根目录哦！")
+
+        # 🎉 3. 显示祝贺/广告横幅
         st.markdown("""
         <div class="congrats-banner">
-            🎉 热烈祝贺！高三(1)班 <b>李华</b>、<b>张伟</b> 同学在本次市级物理竞赛中荣获一等奖！🏆
+            🎉 热烈祝贺！高三(1)班 <b>王</b>、<b>张伟</b> 同学在本次市级物理竞赛中荣获一等奖！🏆
         </div>
         """, unsafe_allow_html=True)
         
-        # 登录框居中
+        # 4. 登录框居中
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
             with st.form("student_login"):
