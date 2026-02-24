@@ -42,7 +42,7 @@ else:
     client = None
 
 # ==============================================================================
-# 🛠️ 核心数据加载与动态光荣榜计算
+# 🛠️ 核心数据加载与动态光荣榜计算 (已修改为前五名并分行)
 # ==============================================================================
 @st.cache_data(ttl=600)
 def load_data(url, header_lines=0):
@@ -50,26 +50,32 @@ def load_data(url, header_lines=0):
     try: return pd.read_csv(url, header=header_lines, on_bad_lines='skip')
     except: return None
 
-def get_dynamic_top3_banner():
-    """自动读取总分表，提取理科和文科的前三名"""
-    msg_parts = []
+def get_dynamic_top5_banner():
+    """自动读取总分表，提取理科和文科的前五名，并分两行显示"""
+    str_p = ""
+    str_h = ""
     try:
         if SCORE_URL_PHYSICS:
             df_p = load_data(SCORE_URL_PHYSICS)
             if df_p is not None and '总分' in df_p.columns and '姓名' in df_p.columns:
                 df_p['总分'] = pd.to_numeric(df_p['总分'], errors='coerce')
-                top_p = df_p.dropna(subset=['总分']).sort_values(by='总分', ascending=False).head(3)['姓名'].astype(str).str.strip().tolist()
-                if top_p: msg_parts.append(f"理科前三：{'、'.join(top_p)}")
+                top_p = df_p.dropna(subset=['总分']).sort_values(by='总分', ascending=False).head(5)['姓名'].astype(str).str.strip().tolist()
+                if top_p: str_p = f"🚀 理科前五：{'、'.join(top_p)}"
                 
         if SCORE_URL_HISTORY:
             df_h = load_data(SCORE_URL_HISTORY)
             if df_h is not None and '总分' in df_h.columns and '姓名' in df_h.columns:
                 df_h['总分'] = pd.to_numeric(df_h['总分'], errors='coerce')
-                top_h = df_h.dropna(subset=['总分']).sort_values(by='总分', ascending=False).head(3)['姓名'].astype(str).str.strip().tolist()
-                if top_h: msg_parts.append(f"文科前三：{'、'.join(top_h)}")
+                top_h = df_h.dropna(subset=['总分']).sort_values(by='总分', ascending=False).head(5)['姓名'].astype(str).str.strip().tolist()
+                if top_h: str_h = f"🌟 文科前五：{'、'.join(top_h)}"
                 
-        if msg_parts:
-            return "🎉 成绩表彰光荣榜 | " + " 🌟 ".join(msg_parts) + " 🏆"
+        if str_p or str_h:
+            # 组合HTML，使用 <br> 强制换行
+            banner_html = "🎉 <b>成绩表彰光荣榜</b> 🏆<br>"
+            if str_p: banner_html += f"<span style='font-size: 16px; color: #D97706;'>{str_p}</span>"
+            if str_p and str_h: banner_html += "<br>"
+            if str_h: banner_html += f"<span style='font-size: 16px; color: #D97706;'>{str_h}</span>"
+            return banner_html
         else:
             return "🎉 欢迎使用英华学校高中部考试学情智能分析系统！ 🏆"
     except Exception as e:
@@ -120,16 +126,17 @@ st.markdown("""
         background: linear-gradient(90deg, #FFFBEB, #FFF7ED);
         border: 2px solid #FCD34D;
         color: #92400E;
-        padding: 15px 20px;
+        padding: 12px 20px;
         border-radius: 12px;
         text-align: center;
         font-size: 18px;
         font-weight: bold;
-        margin-top: 5px;
-        margin-bottom: 35px;
+        margin-top: 0px;
+        margin-bottom: 25px;
         box-shadow: 0 4px 12px rgba(252, 211, 77, 0.2);
+        line-height: 1.6; /* 增加了行距，让两行文字看起来更舒服 */
     }
-    .main-title { text-align: center; color: #1E3A8A; font-size: 34px; font-weight: 800; margin-bottom: 15px; }
+    .main-title { text-align: center; color: #1E3A8A; font-size: 28px; font-weight: 800; margin-bottom: 15px; } /* 字体从34px调整为28px */
     .ai-box { background: linear-gradient(135deg, #f0f7ff 0%, #e6f3ff 100%); border-left: 5px solid #0068C9; padding: 20px; border-radius: 8px; font-size: 15px; color: #333;}
 </style>
 """, unsafe_allow_html=True)
@@ -149,15 +156,17 @@ selected_nav = option_menu(
 if selected_nav in ["成绩总览", "深度诊断"]:
     
     if not st.session_state.logged_in_student:
+        # 主标题
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
-        banner_text = get_dynamic_top3_banner()
+        # 横幅光荣榜 (包含两排前五名)
+        banner_text = get_dynamic_top5_banner()
         st.markdown(f'<div class="congrats-banner">{banner_text}</div>', unsafe_allow_html=True)
         
+        # 左右护法 + 登录框
         col_left, col_mid, col_right = st.columns([1, 1.8, 1])
         
         with col_left:
             st.markdown("<br><br>", unsafe_allow_html=True)
-            # 🔴 这里改成了 panda.gif
             if os.path.exists("panda.gif"): st.image("panda.gif", use_container_width=True)
             
         with col_mid:
@@ -176,7 +185,6 @@ if selected_nav in ["成绩总览", "深度诊断"]:
         
         with col_right:
             st.markdown("<br><br>", unsafe_allow_html=True)
-            # 🔴 这里改成了 star.gif
             if os.path.exists("star.gif"): st.image("star.gif", use_container_width=True)
     
     else:
@@ -302,7 +310,6 @@ elif selected_nav == "教师后台":
         col_left, col_mid, col_right = st.columns([1, 1.8, 1])
         with col_left:
             st.markdown("<br><br>", unsafe_allow_html=True)
-            # 🔴 这里改成了 panda.gif
             if os.path.exists("panda.gif"): st.image("panda.gif", use_container_width=True)
         with col_mid:
             with st.form("admin_login"):
@@ -315,7 +322,6 @@ elif selected_nav == "教师后台":
                     else: st.error("密码错误")
         with col_right:
             st.markdown("<br><br>", unsafe_allow_html=True)
-            # 🔴 这里改成了 star.gif
             if os.path.exists("star.gif"): st.image("star.gif", use_container_width=True)
             
     else:
