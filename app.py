@@ -54,7 +54,6 @@ def get_dynamic_top3_banner():
     """自动读取总分表，提取理科和文科的前三名"""
     msg_parts = []
     try:
-        # 获取理科前三
         if SCORE_URL_PHYSICS:
             df_p = load_data(SCORE_URL_PHYSICS)
             if df_p is not None and '总分' in df_p.columns and '姓名' in df_p.columns:
@@ -62,7 +61,6 @@ def get_dynamic_top3_banner():
                 top_p = df_p.dropna(subset=['总分']).sort_values(by='总分', ascending=False).head(3)['姓名'].astype(str).str.strip().tolist()
                 if top_p: msg_parts.append(f"理科前三：{'、'.join(top_p)}")
                 
-        # 获取文科前三
         if SCORE_URL_HISTORY:
             df_h = load_data(SCORE_URL_HISTORY)
             if df_h is not None and '总分' in df_h.columns and '姓名' in df_h.columns:
@@ -118,7 +116,6 @@ st.markdown("""
     div[data-testid="stMetric"]:hover { transform: translateY(-3px); box-shadow: 0 6px 15px rgba(0,0,0,0.08); }
     div[data-testid="stForm"] { background-color: #ffffff; padding: 30px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); border: none; }
     div[data-testid="stFormSubmitButton"] > button { background-color: #0068C9; color: white; font-weight: bold; border-radius: 8px; border: none; padding: 10px 0; }
-    /* 光荣榜横幅样式 */
     .congrats-banner {
         background: linear-gradient(90deg, #FFFBEB, #FFF7ED);
         border: 2px solid #FCD34D;
@@ -152,19 +149,16 @@ selected_nav = option_menu(
 if selected_nav in ["成绩总览", "深度诊断"]:
     
     if not st.session_state.logged_in_student:
-        # --- 1. 顶部标题和横幅 ---
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
         banner_text = get_dynamic_top3_banner()
         st.markdown(f'<div class="congrats-banner">{banner_text}</div>', unsafe_allow_html=True)
         
-        # --- 2. 左右护法 + 登录框的完美排版 ---
-        # 1:1.8:1 的比例既能保证图片大小合适，又能凸显中间的登录框
         col_left, col_mid, col_right = st.columns([1, 1.8, 1])
         
         with col_left:
-            # 加入两个空行，让图片往下沉一点，和登录框对齐
             st.markdown("<br><br>", unsafe_allow_html=True)
-            if os.path.exists("panda.png"): st.image("panda.png", use_container_width=True)
+            # 🔴 这里改成了 panda.gif
+            if os.path.exists("panda.gif"): st.image("panda.gif", use_container_width=True)
             
         with col_mid:
             with st.form("student_login"):
@@ -181,12 +175,11 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                     else: st.error("⚠️ 请完整填写姓名和考号")
         
         with col_right:
-            # 同样加入空行向下对齐
             st.markdown("<br><br>", unsafe_allow_html=True)
-            if os.path.exists("star.png"): st.image("star.png", use_container_width=True)
+            # 🔴 这里改成了 star.gif
+            if os.path.exists("star.gif"): st.image("star.gif", use_container_width=True)
     
     else:
-        # 学生已登录后的页面逻辑 (保持不变)
         c1, c2 = st.columns([4, 1])
         c1.markdown(f"**当前用户：** {st.session_state.logged_in_student} | **方向：** {st.session_state.logged_in_direction}")
         if c2.button("🚪 退出登录", use_container_width=True): logout()
@@ -299,17 +292,18 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                                             st.markdown(f"<div class='ai-box'><b>AI导师：</b><br><br>{ai_reply}</div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 🚀 页面 3: 教师后台 (同样增加了左右护法)
+# 🚀 页面 3: 教师后台
 # ==============================================================================
 elif selected_nav == "教师后台":
     if not st.session_state.is_admin:
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
-        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) # 占位
+        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) 
         
         col_left, col_mid, col_right = st.columns([1, 1.8, 1])
         with col_left:
             st.markdown("<br><br>", unsafe_allow_html=True)
-            if os.path.exists("panda.png"): st.image("panda.png", use_container_width=True)
+            # 🔴 这里改成了 panda.gif
+            if os.path.exists("panda.gif"): st.image("panda.gif", use_container_width=True)
         with col_mid:
             with st.form("admin_login"):
                 st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🏫 教务管理中枢</h3><br>", unsafe_allow_html=True)
@@ -321,7 +315,8 @@ elif selected_nav == "教师后台":
                     else: st.error("密码错误")
         with col_right:
             st.markdown("<br><br>", unsafe_allow_html=True)
-            if os.path.exists("star.png"): st.image("star.png", use_container_width=True)
+            # 🔴 这里改成了 star.gif
+            if os.path.exists("star.gif"): st.image("star.gif", use_container_width=True)
             
     else:
         c1, c2 = st.columns([5, 1])
