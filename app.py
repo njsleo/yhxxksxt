@@ -4,18 +4,17 @@ import plotly.graph_objects as go
 import plotly.express as px
 from streamlit_option_menu import option_menu
 import openai
-import os # 引入os库用来检查图片文件是否存在
+import os
 
 # ==============================================================================
-# 1. 页面基础配置 (设置新的主题名称)
+# 1. 页面基础配置 
 # ==============================================================================
 st.set_page_config(page_title="英华学校高中部考试学情智能分析", layout="wide", page_icon="🏫", initial_sidebar_state="collapsed")
 
 # ==============================================================================
-# 🔐 安全配置读取 (从 secrets 中读取，代码中不再包含任何密码和链接)
+# 🔐 安全配置读取
 # ==============================================================================
 try:
-    # 如果本地没有配置 secrets.toml，这里会提示
     ADMIN_PASSWORD = st.secrets["ADMIN_PWD"]
     SCORE_URL_PHYSICS = st.secrets.get("URL_SCORE_PHYSICS", "")
     SCORE_URL_HISTORY = st.secrets.get("URL_SCORE_HISTORY", "")
@@ -32,64 +31,73 @@ try:
         "🔤 英语": st.secrets.get("URL_DETAIL_ENGLISH", "")
     }
     
-    # 获取 AI API KEY
     AI_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
 except Exception as e:
     st.error("⚠️ 系统配置读取失败，请检查 Streamlit 后台的 Secrets 是否配置正确。")
     st.stop()
 
-# --- 初始化 AI 客户端 ---
 if AI_API_KEY:
     client = openai.OpenAI(api_key=AI_API_KEY, base_url="https://api.deepseek.com")
 else:
     client = None
 
 # ==============================================================================
+# 🛠️ 核心数据加载与动态光荣榜计算
+# ==============================================================================
+@st.cache_data(ttl=600)
+def load_data(url, header_lines=0):
+    if not url or not url.strip(): return None
+    try: return pd.read_csv(url, header=header_lines, on_bad_lines='skip')
+    except: return None
+
+def get_dynamic_top3_banner():
+    """自动读取总分表，提取理科和文科的前三名"""
+    msg_parts = []
+    try:
+        # 获取理科前三
+        if SCORE_URL_PHYSICS:
+            df_p = load_data(SCORE_URL_PHYSICS)
+            if df_p is not None and '总分' in df_p.columns and '姓名' in df_p.columns:
+                df_p['总分'] = pd.to_numeric(df_p['总分'], errors='coerce')
+                top_p = df_p.dropna(subset=['总分']).sort_values(by='总分', ascending=False).head(3)['姓名'].astype(str).str.strip().tolist()
+                if top_p: msg_parts.append(f"理科前三：{'、'.join(top_p)}")
+                
+        # 获取文科前三
+        if SCORE_URL_HISTORY:
+            df_h = load_data(SCORE_URL_HISTORY)
+            if df_h is not None and '总分' in df_h.columns and '姓名' in df_h.columns:
+                df_h['总分'] = pd.to_numeric(df_h['总分'], errors='coerce')
+                top_h = df_h.dropna(subset=['总分']).sort_values(by='总分', ascending=False).head(3)['姓名'].astype(str).str.strip().tolist()
+                if top_h: msg_parts.append(f"文科前三：{'、'.join(top_h)}")
+                
+        if msg_parts:
+            return "🎉 成绩表彰光荣榜 | " + " 🌟 ".join(msg_parts) + " 🏆"
+        else:
+            return "🎉 欢迎使用英华学校高中部考试学情智能分析系统！ 🏆"
+    except Exception as e:
+        return "🎉 欢迎使用英华学校高中部考试学情智能分析系统！ 🏆"
+
+# ==============================================================================
 # 🧠 AI 导师功能定义
 # ==============================================================================
 def get_ai_advice_for_student(student_name, subject, weak_points, strong_points):
-    if not client: return "⚠️ AI 尚未配置，无法生成建议，请联系管理员。"
-    prompt = f"""
-    你是一位拥有20年教学经验的高中{subject}金牌教师。
-    你的学生 {student_name} 刚完成了一次考试分析。
-    他的优势知识点是：{strong_points}。
-    他的薄弱知识点是：{weak_points}。
-    请你用温暖、鼓励、专业的语气，直接对他说话，给他写一段大约300字的个性化学习建议和下一步的提分计划。
-    不要说空话，给出具体的学习步骤建议。
-    """
+    if not client: return "⚠️ AI 尚未配置，无法生成建议。"
+    prompt = f"你是拥有20年经验的高中{subject}教师。学生 {student_name} 优势：{strong_points}。薄弱：{weak_points}。请写约300字的个性化鼓励和提分计划。"
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": "你是一个专业的教育AI导师。"},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"AI 生成失败，请确认您的 API Key 是否有余额。错误信息：{e}"
+        res = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "system", "content": "你是专业AI导师。"}, {"role": "user", "content": prompt}])
+        return res.choices[0].message.content
+    except Exception as e: return f"AI 生成失败: {e}"
 
 def get_ai_advice_for_teacher(subject, weak_points_list):
-    if not client: return "⚠️ AI 尚未配置，无法生成建议，请联系管理员。"
-    prompt = f"""
-    你是一位高中教研员。你们学校高三年级刚考完{subject}。
-    全校大数据显示，学生们失分最严重的共性薄弱点是：{weak_points_list}。
-    请你给{subject}备课组的老师们写一份大约300字的“讲评课教研建议”，指出针对这些薄弱点，课堂上该采用什么教学策略来帮助学生突破。
-    """
+    if not client: return "⚠️ AI 尚未配置。"
+    prompt = f"你是教研员。高三年级{subject}失分严重的共性薄弱点是：{weak_points_list}。请给老师们写约300字的讲评课教研建议。"
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": "你是一个专业的学校教研组长AI。"},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"AI 生成失败: {e}"
+        res = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "system", "content": "你是教研专家AI。"}, {"role": "user", "content": prompt}])
+        return res.choices[0].message.content
+    except Exception as e: return f"AI 生成失败: {e}"
 
 # ==============================================================================
-# --- 初始化状态与全局 CSS ---
+# --- 状态与样式 ---
 # ==============================================================================
 if 'logged_in_student' not in st.session_state: st.session_state.logged_in_student = None
 if 'logged_in_direction' not in st.session_state: st.session_state.logged_in_direction = None
@@ -101,22 +109,16 @@ def logout():
     st.session_state.is_admin = False
     st.rerun()
 
-# 在这里定义我们新的 CSS 样式
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
     .stApp { background-color: #f4f7f9; }
-    /* 卡片样式 */
     div[data-testid="stMetric"] { background-color: #ffffff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); border: 1px solid #ebeef5; text-align: center; transition: transform 0.2s; }
     div[data-testid="stMetric"]:hover { transform: translateY(-3px); box-shadow: 0 6px 15px rgba(0,0,0,0.08); }
-    /* 表单样式 */
     div[data-testid="stForm"] { background-color: #ffffff; padding: 30px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); border: none; }
     div[data-testid="stFormSubmitButton"] > button { background-color: #0068C9; color: white; font-weight: bold; border-radius: 8px; border: none; padding: 10px 0; }
-    div[data-testid="stFormSubmitButton"] > button:hover { background-color: #0052a3; box-shadow: 0 4px 12px rgba(0, 104, 201, 0.3); }
-    /* AI 对话框样式 */
-    .ai-box { background: linear-gradient(135deg, #f0f7ff 0%, #e6f3ff 100%); border-left: 5px solid #0068C9; padding: 20px; border-radius: 8px; font-size: 15px; line-height: 1.6; color: #333;}
-    /* 🎉 新增：祝贺横幅样式 */
+    /* 光荣榜横幅样式 */
     .congrats-banner {
         background: linear-gradient(90deg, #FFFBEB, #FFF7ED);
         border: 2px solid #FCD34D;
@@ -126,72 +128,45 @@ st.markdown("""
         text-align: center;
         font-size: 18px;
         font-weight: bold;
+        margin-top: 10px;
         margin-bottom: 25px;
         box-shadow: 0 4px 12px rgba(252, 211, 77, 0.2);
-        animation: pulse 2s infinite;
     }
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(252, 211, 77, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(252, 211, 77, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(252, 211, 77, 0); }
-    }
-    /* 主标题样式 */
-    .main-title {
-        text-align: center;
-        color: #1E3A8A;
-        font-size: 36px;
-        font-weight: 800;
-        margin-bottom: 20px;
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-    }
+    .main-title { text-align: center; color: #1E3A8A; font-size: 34px; font-weight: 800; margin-bottom: 15px; }
+    .ai-box { background: linear-gradient(135deg, #f0f7ff 0%, #e6f3ff 100%); border-left: 5px solid #0068C9; padding: 20px; border-radius: 8px; font-size: 15px; color: #333;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 顶端导航 ---
 selected_nav = option_menu(
     menu_title=None, options=["成绩总览", "深度诊断", "教师后台"], 
     icons=["clipboard-data", "bullseye", "person-badge"], menu_icon="cast", default_index=0, orientation="horizontal",
     styles={
         "container": {"padding": "5px", "background-color": "#ffffff", "border-radius": "12px", "box-shadow": "0 4px 15px rgba(0,0,0,0.08)", "margin-bottom": "30px", "position": "sticky", "top": "15px", "z-index": "9999"},
-        "icon": {"color": "#888", "font-size": "18px"}, 
-        "nav-link": {"font-size": "16px", "text-align": "center", "margin":"0px", "border-radius": "8px", "color": "#555", "font-weight": "600"},
         "nav-link-selected": {"background-color": "#0068C9", "color": "white", "font-weight": "bold"},
     }
 )
 
-@st.cache_data(ttl=600)
-def load_data(url, header_lines=0):
-    if not url or not url.strip(): return None
-    try: return pd.read_csv(url, header=header_lines, on_bad_lines='skip')
-    except: return None
-
 # ==============================================================================
-# 🚀 页面 1 & 2: 学生端
+# 🚀 页面逻辑
 # ==============================================================================
 if selected_nav in ["成绩总览", "深度诊断"]:
     
     if not st.session_state.logged_in_student:
-        # 🎓 1. 显示新的网站主标题
+        # --- 华丽的登录页头部排版 ---
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
         
-        # 🐼 2. 显示熊猫和小星星吉祥物图片 (居中显示)
-        # 我们使用三列布局，把图片放在中间的列，这样可以居中且控制大小
-        c_pad1, c_img, c_pad2 = st.columns([1, 2, 1]) 
-        with c_img:
-            # 检查一下您是否上传了 image.png，如果没上传给个友好提示
-            if os.path.exists("image.png"):
-                st.image("image.png", use_column_width=True)
-            else:
-                st.info("💡 提示：为了让可爱的熊猫和小星星显示在这里，请记得将图片命名为 image.png 并上传到您的 GitHub 仓库根目录哦！")
-
-        # 🎉 3. 显示祝贺/广告横幅
-        st.markdown("""
-        <div class="congrats-banner">
-            🎉 热烈祝贺！高三(1)班 <b>王</b>、<b>张伟</b> 同学在本次市级物理竞赛中荣获一等奖！🏆
-        </div>
-        """, unsafe_allow_html=True)
+        # 居中并排显示两个小图标 (控制了完美比例)
+        img_col1, img_col2, img_col3, img_col4 = st.columns([3, 1, 1, 3])
+        with img_col2:
+            if os.path.exists("panda.png"): st.image("panda.png", width=110)
+        with img_col3:
+            if os.path.exists("star.png"): st.image("star.png", width=110)
+            
+        # 自动提取前三名的动态光荣榜
+        banner_text = get_dynamic_top3_banner()
+        st.markdown(f'<div class="congrats-banner">{banner_text}</div>', unsafe_allow_html=True)
         
-        # 4. 登录框居中
+        # 登录框
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
             with st.form("student_login"):
@@ -208,16 +183,14 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                     else: st.error("⚠️ 请完整填写姓名和考号")
     
     else:
-        # 登录后的界面
+        # 学生已登录后的页面逻辑 (保持不变)
         c1, c2 = st.columns([4, 1])
         c1.markdown(f"**当前用户：** {st.session_state.logged_in_student} | **方向：** {st.session_state.logged_in_direction}")
-        with c2:
-            if st.button("🚪 退出登录", use_container_width=True): logout()
+        if c2.button("🚪 退出登录", use_container_width=True): logout()
         st.divider()
 
         target_url = SCORE_URL_PHYSICS if st.session_state.logged_in_direction == "物理方向" else SCORE_URL_HISTORY
         
-        # --- 页面1: 成绩总览 ---
         if selected_nav == "成绩总览":
             df = load_data(target_url)
             if df is not None:
@@ -225,27 +198,19 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                 df[id_col] = df[id_col].astype(str).str.strip()
                 student = df[(df['姓名'].astype(str).str.strip() == st.session_state.logged_in_student) & (df[id_col] == st.session_state.logged_in_id)]
                 
-                if len(student) == 0: st.error("❌ 未匹配到您的成绩信息。请确认是否填错了考号，或者当前方向是否选对。")
+                if len(student) == 0: st.error("❌ 未匹配到成绩。请确认考号和方向。")
                 else:
                     stu_data = student.iloc[0]
-                    st.markdown("### 🏆 本次考试概览")
                     k1, k2, k3, k4 = st.columns(4)
                     k1.metric("姓名", stu_data['姓名'])
                     k2.metric("方向", st.session_state.logged_in_direction)
-                    
-                    if '总分' in stu_data: total = stu_data['总分']
-                    else:
-                        exclude = ['姓名', '考号', '学号', '班级', '排名', '总分', '班级排名', '年级排名']
-                        cols = [c for c in df.columns if c not in exclude and pd.to_numeric(stu_data[c], errors='coerce') >= 0]
-                        total = sum([stu_data[c] for c in cols])
-                        
+                    total = stu_data.get('总分', 0)
                     k3.metric("考试总分", f"{total}")
                     k4.metric("班级排名", stu_data.get('班级排名', 'N/A'))
                     
                     st.markdown("<br>### 📊 各科得分对比", unsafe_allow_html=True)
                     exclude_cols = ['姓名', '考号', '学号', '班级', '总分', '班级排名', '年级排名', 'Unnamed', '序号']
                     subject_cols = [c for c in df.columns if c not in exclude_cols and not str(c).startswith('Unnamed') and pd.to_numeric(stu_data[c], errors='coerce') >= 0]
-                    
                     if subject_cols:
                         chart_data = pd.DataFrame({"科目": subject_cols, "得分": [stu_data[c] for c in subject_cols]})
                         col_bar, col_radar = st.columns(2)
@@ -258,35 +223,26 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                             fig2.update_traces(fill='toself', line_color='#0068C9')
                             fig2.update_layout(margin=dict(t=40, b=20, l=40, r=40), paper_bgcolor='rgba(0,0,0,0)')
                             st.plotly_chart(fig2, use_container_width=True)
-            else: st.warning("⚠️ 总成绩数据未准备好。请联系管理员配置表格链接。")
+            else: st.warning("数据未准备好。")
                 
-        # --- 页面2: 深度诊断 + AI导师 ---
         elif selected_nav == "深度诊断":
-            st.markdown("### 🎯 学科知识点深度剖析")
             avail_subs = {k: v for k, v in SUBJECT_URLS.items() if v and v.strip()}
-            if not avail_subs: st.info("老师暂时还未配置单科诊断数据源。")
+            if not avail_subs: st.info("暂未配置单科诊断数据。")
             else:
-                sel_sub = st.selectbox("👇 请选择需要查阅的科目报告", list(avail_subs.keys()))
+                sel_sub = st.selectbox("👇 选择科目报告", list(avail_subs.keys()))
                 df_diag = load_data(avail_subs[sel_sub], header_lines=[0, 1, 2])
-                
                 if df_diag is not None:
                     name_idx, id_idx = -1, -1
                     for i, col in enumerate(df_diag.columns):
                         if '姓名' in str(col[0]): name_idx = i
                         if '考号' in str(col[0]) or '学号' in str(col[0]): id_idx = i
-                    
-                    if name_idx == -1 or id_idx == -1:
-                        st.error("表格格式不正确，缺少【姓名】或【考号/学号】列。")
-                    else:
+                    if name_idx != -1 and id_idx != -1:
                         all_names = df_diag.iloc[:, name_idx].astype(str).str.strip().values
                         all_ids = df_diag.iloc[:, id_idx].astype(str).str.strip().values
-                        
                         found_idx = -1
                         for idx, (n, i) in enumerate(zip(all_names, all_ids)):
-                            if n == st.session_state.logged_in_student and i == st.session_state.logged_in_id:
-                                found_idx = idx; break
-                        
-                        if found_idx == -1: st.warning(f"在 {sel_sub} 的试卷中未找到您的成绩。")
+                            if n == st.session_state.logged_in_student and i == st.session_state.logged_in_id: found_idx = idx; break
+                        if found_idx == -1: st.warning("未查到该科数据。")
                         else:
                             knowledge_map = {} 
                             for col in df_diag.columns:
@@ -302,10 +258,7 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                                 knowledge_map[k_point]['full'] += full
                                 knowledge_map[k_point]['class_total'] += class_s
                             
-                            k_data = []
-                            weak_points_list = []
-                            strong_points_list = []
-                            
+                            k_data, weak_points_list, strong_points_list = [], [], []
                             for kp, val in knowledge_map.items():
                                 my_rate = round((val['my']/val['full'])*100, 1) if val['full']>0 else 0
                                 avg_rate = round((val['class_total']/val['full'])*100, 1) if val['full']>0 else 0
@@ -323,65 +276,47 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                                     avgs = df_kp['班级平均'].tolist() + [df_kp['班级平均'].tolist()[0]]
                                     fig.add_trace(go.Scatterpolar(r=avgs, theta=cats, fill='toself', name='班级平均', line_color='#cccccc'))
                                     fig.add_trace(go.Scatterpolar(r=mys, theta=cats, fill='toself', name='我的掌握', line_color='#FF4B4B'))
-                                    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])), paper_bgcolor='rgba(0,0,0,0)', margin=dict(t=20, b=20))
+                                    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])), paper_bgcolor='rgba(0,0,0,0)')
                                     st.plotly_chart(fig, use_container_width=True)
                                 with c_text:
-                                    st.markdown("#### 🩺 专家系统诊断建议")
+                                    st.markdown("#### 🩺 专家系统诊断")
                                     if weak_points_list:
-                                        st.error("🚨 **以下知识模块出现明显丢分，需针对性突破：**")
                                         for row in k_data:
                                             if row['知识点'] in weak_points_list:
-                                                diff = row['班级平均'] - row['我的掌握率']
-                                                st.write(f"▪ **{row['知识点']}** (落后平均 {diff:.1f}%)")
-                                    else:
-                                        st.success("🎉 **太棒了！** 您在该科目的所有考核知识点均达到或超过班级平均水平！")
+                                                st.write(f"▪ **{row['知识点']}** (落后 {row['班级平均'] - row['我的掌握率']:.1f}%)")
+                                    else: st.success("🎉 所有知识点均达标！")
                                 
-                                # === 🤖 接入 AI 导师分析 ===
                                 st.divider()
-                                st.markdown("### 🤖 AI 专属导师提分计划")
                                 if AI_API_KEY:
-                                    if st.button(f"✨ 一键生成 {sel_sub} 个性化提分建议", type="primary"):
-                                        with st.spinner("AI 导师正在为您深度分析试卷，定制专属学习计划..."):
-                                            weak_str = "、".join(weak_points_list) if weak_points_list else "无明显薄弱点"
-                                            strong_str = "、".join(strong_points_list) if strong_points_list else "基础待整体加强"
-                                            
-                                            ai_reply = get_ai_advice_for_student(st.session_state.logged_in_student, sel_sub, weak_str, strong_str)
+                                    if st.button(f"✨ 一键生成个性化提分建议", type="primary"):
+                                        with st.spinner("AI 导师正在分析..."):
+                                            w_str = "、".join(weak_points_list) if weak_points_list else "无"
+                                            s_str = "、".join(strong_points_list) if strong_points_list else "无"
+                                            ai_reply = get_ai_advice_for_student(st.session_state.logged_in_student, sel_sub, w_str, s_str)
                                             st.markdown(f"<div class='ai-box'><b>AI导师：</b><br><br>{ai_reply}</div>", unsafe_allow_html=True)
-                                else:
-                                    st.info("💡 提示：管理员尚未在 Secrets 中配置 DeepSeek API 密钥，暂无法启用 AI 导师功能。")
-                else:
-                    st.error("数据表读取异常或链接未配置。")
 
 # ==============================================================================
-# 🚀 页面 3: 教师后台 (管理员模式)
+# 🚀 页面 3: 教师后台
 # ==============================================================================
 elif selected_nav == "教师后台":
-    
     if not st.session_state.is_admin:
-        # 🎓 显示新的网站主标题
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1><br>", unsafe_allow_html=True)
-        
-        # 登录框居中
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
             with st.form("admin_login"):
-                st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🏫 教务管理中枢</h3><br>", unsafe_allow_html=True)
-                pwd = st.text_input("🔐 管理员密码", type="password")
+                st.markdown("<h3 style='text-align: center;'>👨‍🏫 教务管理中枢</h3>", unsafe_allow_html=True)
+                pwd = st.text_input("🔐 管理密码", type="password")
                 if st.form_submit_button("验证进入", use_container_width=True):
                     if pwd == ADMIN_PASSWORD:
                         st.session_state.is_admin = True
                         st.rerun()
-                    else: st.error("密码错误。")
-    
+                    else: st.error("密码错误")
     else:
         c1, c2 = st.columns([5, 1])
         c1.markdown("### ⚙️ 管理员控制台")
         if c2.button("退出后台", use_container_width=True): logout()
-        
-        adm_menu = st.radio("系统功能：", ["🏆 班级成绩PK", "📈 学情总览", "🧠 共性诊断与 AI 教研"], horizontal=True)
-        st.divider()
-        
-        adm_direction = st.selectbox("分析方向", ["物理方向", "历史方向"])
+        adm_menu = st.radio("功能：", ["🏆 班级成绩PK", "📈 学情总览", "🧠 AI教研"], horizontal=True)
+        adm_direction = st.selectbox("方向", ["物理方向", "历史方向"])
         target_url = SCORE_URL_PHYSICS if adm_direction == "物理方向" else SCORE_URL_HISTORY
         
         if adm_menu == "🏆 班级成绩PK":
@@ -390,63 +325,35 @@ elif selected_nav == "教师后台":
                 exclude = ['姓名', '考号', '学号', '班级', '排名', '总分', '班级排名', '年级排名']
                 subjects = [c for c in df.columns if c not in exclude and pd.to_numeric(df[c], errors='coerce').notna().all()]
                 class_avg = df.groupby('班级')[subjects + ['总分']].mean().round(1).reset_index()
-                
                 c_a, c_b = st.columns(2)
-                with c_a:
-                    fig_total = px.bar(class_avg, x='班级', y='总分', color='班级', text_auto=True, title="各班总分均分对照")
-                    fig_total.update_layout(paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_total, use_container_width=True)
+                with c_a: st.plotly_chart(px.bar(class_avg, x='班级', y='总分', color='班级', text_auto=True), use_container_width=True)
                 with c_b:
-                    sel_sub = st.selectbox("切换单科视角", subjects)
-                    fig_sub = px.bar(class_avg, x='班级', y=sel_sub, color='班级', text_auto=True, title=f"各班 {sel_sub} 均分")
-                    fig_sub.update_layout(paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_sub, use_container_width=True)
-            else:
-                st.warning("总分表尚未准备好，或者表格中缺少【班级】列。")
+                    sel_sub = st.selectbox("单科视角", subjects)
+                    st.plotly_chart(px.bar(class_avg, x='班级', y=sel_sub, color='班级', text_auto=True), use_container_width=True)
 
         elif adm_menu == "📈 学情总览":
             df = load_data(target_url)
             if df is not None and '总分' in df.columns:
-                m1, m2, m3 = st.columns(3)
-                m1.metric("参考总人数", len(df))
-                m2.metric("年级均分", round(df['总分'].mean(), 1))
-                m3.metric("最高分", df['总分'].max())
-                fig_hist = px.histogram(df, x="总分", nbins=15, title="总分正态分布情况", color_discrete_sequence=['#0068C9'])
-                st.plotly_chart(fig_hist, use_container_width=True)
+                st.plotly_chart(px.histogram(df, x="总分", nbins=15), use_container_width=True)
 
-        elif adm_menu == "🧠 共性诊断与 AI 教研":
+        elif adm_menu == "🧠 AI教研":
             avail_subs = [k for k, v in SUBJECT_URLS.items() if v and v.strip()]
-            if not avail_subs:
-                st.info("尚未配置详细的单科诊断链接。")
-            else:
-                sel_diagnosis = st.selectbox("选择要分析的学科", avail_subs)
-                if sel_diagnosis:
-                    df_diag = load_data(SUBJECT_URLS[sel_diagnosis], header_lines=[0, 1, 2])
-                    if df_diag is not None:
-                        k_stats = {}
-                        for col in df_diag.columns:
-                            q_name, k_point = str(col[0]).strip(), str(col[1]).strip()
-                            try: full = float(col[2])
-                            except: full = 0
-                            if full <= 0 or '姓名' in q_name: continue
-                            if k_point not in k_stats: k_stats[k_point] = []
-                            k_stats[k_point].append(pd.to_numeric(df_diag[col], errors='coerce').mean() / full)
-                        
-                        if k_stats:
-                            k_final = [{"知识点": kp, "年级平均掌握率": round(sum(rates)/len(rates)*100, 1)} for kp, rates in k_stats.items()]
-                            df_k = pd.DataFrame(k_final).sort_values("年级平均掌握率")
-                            
-                            fig_k = px.bar(df_k, x="年级平均掌握率", y="知识点", orientation='h', title=f"全校【{sel_diagnosis}】薄弱点扫描", color="年级平均掌握率", color_continuous_scale='RdYlGn')
-                            st.plotly_chart(fig_k, use_container_width=True)
-                            
-                            # === 🤖 AI 教研助手 ===
-                            if AI_API_KEY:
-                                st.divider()
-                                st.markdown("### 🤖 AI 教研建议")
-                                if st.button("✨ 一键生成教研组讲评建议", type="primary"):
-                                    with st.spinner("AI 正在分析全级数据并编写教研报告..."):
-                                        worst_points = "、".join(df_k.head(3)['知识点'].tolist())
-                                        ai_teacher_reply = get_ai_advice_for_teacher(sel_diagnosis, worst_points)
-                                        st.markdown(f"<div class='ai-box'><b>教研专家AI：</b><br><br>{ai_teacher_reply}</div>", unsafe_allow_html=True)
-                        else:
-                            st.error("表格结构似乎不正确，没有读取到有效的知识点。")
+            sel_diagnosis = st.selectbox("选择学科", avail_subs) if avail_subs else None
+            if sel_diagnosis:
+                df_diag = load_data(SUBJECT_URLS[sel_diagnosis], header_lines=[0, 1, 2])
+                if df_diag is not None:
+                    k_stats = {}
+                    for col in df_diag.columns:
+                        try: full = float(col[2])
+                        except: full = 0
+                        if full > 0 and '姓名' not in str(col[0]):
+                            kp = str(col[1]).strip()
+                            if kp not in k_stats: k_stats[kp] = []
+                            k_stats[kp].append(pd.to_numeric(df_diag[col], errors='coerce').mean() / full)
+                    if k_stats:
+                        k_final = [{"知识点": kp, "掌握率": round(sum(rates)/len(rates)*100, 1)} for kp, rates in k_stats.items()]
+                        df_k = pd.DataFrame(k_final).sort_values("掌握率")
+                        st.plotly_chart(px.bar(df_k, x="掌握率", y="知识点", orientation='h'), use_container_width=True)
+                        if AI_API_KEY and st.button("✨ 一键生成教研建议", type="primary"):
+                            with st.spinner("AI 编写中..."):
+                                st.markdown(f"<div class='ai-box'>{get_ai_advice_for_teacher(sel_diagnosis, '、'.join(df_k.head(3)['知识点'].tolist()))}</div>", unsafe_allow_html=True)
