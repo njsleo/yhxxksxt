@@ -6,7 +6,7 @@ from streamlit_option_menu import option_menu
 import openai
 
 # --- 1. 页面配置 (必须是第一行 Streamlit 命令) ---
-st.set_page_config(page_title="星辰学情管理与AI测评系统", layout="wide", page_icon="🏫", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="英华学校高中部考试学情智能分析系统", layout="wide", page_icon="🏫", initial_sidebar_state="collapsed")
 
 # ==============================================================================
 # 🔐 安全配置读取 (从 secrets 中读取，代码中不再包含任何密码和链接)
