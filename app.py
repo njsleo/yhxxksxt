@@ -315,19 +315,21 @@ elif selected_nav == "教师后台":
             st.markdown("<br><br>", unsafe_allow_html=True)
             if os.path.exists("panda.gif"): st.image("panda.gif", use_container_width=True)
         with col_mid:
-            with st.form("admin_login"):
+            # 🔴 关键修复：去掉了 st.form，使用 st.container(border=True) 完美替代！
+            with st.container(border=True):
                 st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🏫 教务管理中枢</h3><br>", unsafe_allow_html=True)
                 
-                # 动态选择身份
+                # 动态选择身份（因为没有了 st.form，所以这里的点击是秒级响应的）
                 role = st.radio("请选择您的登录身份：", ["👨‍🏫 学科教师 (仅看本学科)", "👑 教务处/年级长 (全科全览)"], horizontal=True)
+                
                 sel_sub = None
                 if "学科教师" in role:
                     sel_sub = st.selectbox("📝 选择您任教的学科：", list(SUBJECT_URLS.keys()))
                 
                 pwd = st.text_input("🔐 管理密码", type="password")
                 
-                if st.form_submit_button("验证进入", use_container_width=True):
-                    # 如果选了教务处，必须输入ADMIN密码；如果选了学科教师，兼容两种密码
+                # 使用普通按钮替代原来的提交按钮
+                if st.button("验证进入", use_container_width=True, type="primary"):
                     if ("教务处" in role and pwd == ADMIN_PASSWORD) or ("学科教师" in role and (pwd == TEACHER_PASSWORD or pwd == ADMIN_PASSWORD)):
                         if "教务处" in role:
                             st.session_state.is_admin = True
@@ -345,7 +347,7 @@ elif selected_nav == "教师后台":
     elif st.session_state.is_admin:
         c1, c2 = st.columns([5, 1])
         c1.markdown("### 👑 教务处全局控制台 (全科权限)")
-        if c2.button("退出后台", use_container_width=True): logout()
+        if c2.button("🚪 退出后台", use_container_width=True): logout()
         adm_menu = st.radio("功能：", ["🏆 班级成绩PK", "📈 学情总览", "🧠 AI教研"], horizontal=True)
         adm_direction = st.selectbox("方向", ["物理方向", "历史方向"])
         target_url = SCORE_URL_PHYSICS if adm_direction == "物理方向" else SCORE_URL_HISTORY
@@ -392,12 +394,11 @@ elif selected_nav == "教师后台":
     # --- 3. 学科教师单科隔离界面 ---
     elif st.session_state.is_teacher:
         current_sub = st.session_state.teacher_subject
-        # 提取学科纯文本 (例如把 "⚡ 物理" 变成 "物理")
         pure_sub_name = current_sub.split(" ")[-1] if " " in current_sub else current_sub 
         
         c1, c2 = st.columns([5, 1])
         c1.markdown(f"### 👨‍🏫 【{current_sub}】教师专属控制台 (已开启权限隔离)")
-        if c2.button("退出后台", use_container_width=True): logout()
+        if c2.button("🚪 退出后台", use_container_width=True): logout()
         
         adm_menu = st.radio("专属功能：", [f"🏆 班级 {pure_sub_name} 成绩对比", f"🧠 {pure_sub_name} 共性诊断与 AI 教研"], horizontal=True)
         adm_direction = st.selectbox("方向选择", ["物理方向", "历史方向"])
@@ -406,9 +407,7 @@ elif selected_nav == "教师后台":
         if "成绩对比" in adm_menu:
             df = load_data(target_url)
             if df is not None:
-                # 权限隔离：严格检查该学科是否存在，如果存在只计算该学科
                 if pure_sub_name in df.columns and '班级' in df.columns:
-                    # 过滤掉非数字数据
                     df[pure_sub_name] = pd.to_numeric(df[pure_sub_name], errors='coerce')
                     class_avg = df.groupby('班级')[pure_sub_name].mean().round(1).reset_index()
                     st.success(f"🔒 隐私保护已生效：您当前仅能查看各班级的【{pure_sub_name}】单科成绩分布，总分及其他科目已自动隐藏。")
